@@ -2,7 +2,7 @@ import { auth } from '@/server/auth'
 import { headers } from 'next/headers'
 import { LoginButton } from '../common/login-button'
 import { LogoutButton } from '../common/logout-button'
-import { SendEmailButton } from '../common/send-email'
+import { MagicLink } from '../common/magic-link'
 
 export async function SessionProvider() {
   const session = await auth.api.getSession({
@@ -13,11 +13,14 @@ export async function SessionProvider() {
     <div className="flex items-center gap-4">
       <h1>Welcome {session.user.name}</h1>
       <LogoutButton />
-      <SendEmailButton />
     </div>
   ) : (
-    <div>
-      <LoginButton />
+    <div className="flex w-full max-w-md flex-col gap-4">
+      <div className="flex items-center gap-2">
+        <LoginButton />
+        <span className="text-muted-foreground">or</span>
+      </div>
+      <MagicLink />
     </div>
   )
 }

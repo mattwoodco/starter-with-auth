@@ -21,7 +21,11 @@ export const LoginButton = () => {
 
   return (
     <Button onClick={handleSignIn} disabled={isLoading}>
-      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Login'}
+      {isLoading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        'Login with Google'
+      )}
     </Button>
   )
 }

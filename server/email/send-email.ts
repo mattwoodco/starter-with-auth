@@ -22,7 +22,6 @@ export async function sendEmail(payload: EmailPayload) {
       text,
       html: html || text,
     })
-    console.log('🚀 ~ sendEmail ~ data:', data)
 
     return { success: true, data }
   } catch (error) {
