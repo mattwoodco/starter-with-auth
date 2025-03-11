@@ -1,4 +1,4 @@
 export const siteConfig = {
-  title: 'NaaS Stack',
-  description: 'A Prime and modern boilerplate for full-stack developers.',
-}
+  title: "Starter",
+  description: "A simple starter with authentication.",
+};
