@@ -1,0 +1,45 @@
+---
+description: add ai video workflow node
+globs: 
+alwaysApply: false
+---
+- reflect and review the new image generation in the workflow ai
+- create a duplicate, but for video
+- use this api to make videos: [https://fal.ai/models/fal-ai/pixverse/v3.5/image-to-video/fast](https://fal.ai/models/fal-ai/pixverse/v3.5/image-to-video/fast)
+- extend the hello world worflow so the image feeds into the new video node  
+
+# Video Node Workflow Implementation Summary
+
+## Create Core Video Node Components
+- Create `video-node.tsx` component with video display capabilities
+- Create `video-node-controller.tsx` to manage state and interactions
+- Implement video configuration options (duration, resolution, fps)
+
+## Register Video Node in System
+- Add `VideoNodeController` to `FlowNode` type in workflow.ts
+- Configure required targets for video node in `NODES_CONFIG`
+- Add video node factory in node-factory.ts with default settings
+
+## Implement Video Processing Logic
+- Create `generate-video.ts`
+- Add video node processor in server-node-processors.ts
+- Connect processor to handle prompt inputs and generate video outputs
+
+## Update UI Components
+- Add Video icon and button to nodes-panel.tsx
+- Configure proper styling for video node display
+- Set up video playback controls in node component
+
+## Integrate with Hello World Workflow
+- Add video node to generate-image-flow.ts
+- Position video node to the right of image node
+- Create connection from image node result to video node prompt
+- Register VideoNodeController in page.tsx nodeTypes
+
+## Result
+The workflow now:
+1. Takes user text input
+2. Enhances the prompt with AI
+3. Generates an image with the enhanced prompt
+4. Passes the image to the video node
+5. Creates a video based on the image input

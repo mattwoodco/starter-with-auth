@@ -1,0 +1,273 @@
+---
+description: setup spotify playback client
+globs: 
+alwaysApply: false
+---
+- check if NEXT_PUBLIC_SPOTIFY_CLIENT_ID in .env.local, if not, prompt user, and tell them to get at to https://developer.spotify.com/dashboard
+
+### Key Points
+- It seems likely that you can create a Next.js Typescript Spotify Web Playback SDK example to register your site as a playback device and hear audio from Spotify, but it requires setting up authentication and handling tokens.
+- The process involves integrating the Spotify SDK, implementing an authentication flow, and initializing a player with an access token to play audio.
+- Research suggests that users need a Spotify Premium account for this to work, and the setup can be complex due to server-side and client-side interactions.
+
+### Setup Overview
+To get started, you'll need to create a Next.js project with Typescript, register a Spotify app for credentials, and implement both client-side and server-side code for authentication and playback.
+
+### Authentication Flow
+You'll need a login button that redirects to Spotify for authorization, and an API route to handle the callback, exchange the code for an access token, and store it in a cookie. This token is then used to initialize the player.
+
+### Player Initialization
+Once the token is available, the Spotify player is initialized in the client-side code, set to play a sample track, and should register your site as a playback device, allowing you to hear audio directly from the site.
+
+---
+
+### Detailed Implementation
+
+This section provides a comprehensive guide to creating a Next.js Typescript application integrating the Spotify Web Playback SDK, allowing your site to act as a playback device and play audio from Spotify. The process involves setting up the project, configuring authentication, and initializing the player, with detailed code examples and explanations.
+
+#### Project Setup
+Begin by creating a new Next.js project with Typescript support and installing necessary dependencies:
+
+- Create the project:
+  ```bash
+  npx create-next-app --ts my-app
+  ```
+- Install required packages:
+  ```bash
+  npm install axios
+  npm install --save-dev @types/spotify-web-playback-sdk
+  ```
+
+Environment variables are crucial for securing your Spotify credentials. Create a `.env` file in the root directory with:
+```
+SPOTIFYClientId=your_client_id
+SPOTIFYClientSecret=your_client_secret
+```
+Replace `your_client_id` and `your_client_secret` with the credentials obtained from registering your app at the [Spotify for Developers Dashboard](mdc:https:/developer.spotify.com/dashboard).
+
+#### Including the Spotify SDK
+The Spotify Web Playback SDK is a client-side JavaScript library loaded via a script tag. Modify `pages/_document.tsx` to include this script in the HTML head:
+
+```tsx
+import Document, { Head, Main, NextScript } from 'next/document';
+
+export default class MyDocument extends Document {
+  render() {
+    return (
+      <html>
+        <Head>
+          <script src="https://sdk.scdn.co/spotify-player.js" />
+        </Head>
+        <body>
+          <Main />
+          <NextScript />
+        </body>
+      </html>
+    );
+  }
+}
+```
+This ensures the SDK is loaded before your page content, enabling client-side initialization of the player.
+
+#### Main Page Implementation (`pages/index.tsx`)
+The main page handles user authentication and player initialization. It uses server-side props to read the access token from cookies and client-side effects to set up the Spotify player:
+
+```tsx
+import { GetServerSideProps } from 'next';
+import { useEffect } from 'react';
+
+export const getServerSideProps: GetServerSideProps = async (context) => {
+  const cookies = context?.req?.headers?.cookie;
+  const tokenCookie = cookies?.split(';').find(c => c.trim().startsWith('access_token='));
+  const token = tokenCookie?.split('=')[1];
+
+  return {
+    props: {
+      token: token || '',
+    },
+  };
+};
+
+export default function Home({ token }: { token: string }) {
+  const handleLogin = () => {
+    const params = new URLSearchParams({
+      client_id: process.env.SPOTIFYClientId,
+      response_type: 'code',
+      'redirect URI': 'http://localhost:3000/api/auth/callback',
+      scope: 'streaming user-read-playback-state',
+    });
+
+    const authUrl = `https://accounts.spotify.com/authorize?${params.toString()}`;
+    window.location.href = authUrl;
+  };
+
+  useEffect(() => {
+    if (token) {
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        const player = new window.Spotify.Player({
+          name: 'My Player',
+          getOAuthToken: cb => { cb(token); },
+          volume: 0.5
+        });
+
+        player.on('player_state_changed', state => {
+          console.log('Player state changed:', state);
+        });
+
+        player.on('ready', () => {
+          console.log('Player is ready');
+          player.play({ uris: ['spotify:track:4iV5W9uYEdYUVa79Axb7Rh'] });
+        });
+
+        player.connect();
+      };
+    }
+  }, [token]);
+
+  return (
+    <div>
+      <h1>Spotify Web Playback SDK Example</h1>
+      { token ? <p>Token is available, player should be initializing...</p> : <button onClick={handleLogin}>Login with Spotify</button> }
+    </div>
+  );
+}
+```
+This code sets up a login button for users without a token, reads the token via server-side props, and initializes the player to play a sample track (e.g., "Blinding Lights" by The Weeknd, URI `spotify:track:4iV5W9uYEdYUVa79Axb7Rh`) when ready. The player automatically registers the site as a Spotify Connect device upon connection.
+
+#### Authentication Callback (`pages/api/auth/callback.ts`)
+The API route handles the OAuth callback from Spotify, exchanging the authorization code for an access token and storing it in a cookie:
+
+```ts
+import type { NextApiRequest, NextApiResponse } from 'next';
+import axios from 'axios';
+
+const clientId = process.env.SPOTIFYClientId;
+const clientSecret = process.env.SPOTIFYClientSecret;
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { code } = req.query;
+
+  if (!code) {
+    res.status(400).send('No code provided');
+    return;
+  }
+
+  try {
+    const auth = Buffer.from(clientId + ':' + clientSecret).toString('base64');
+    const data = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      'redirect URI': 'http://localhost:3000/api/auth/callback',
+    });
+
+    const tokenResponse = await axios.post('https://accounts.spotify.com/api/token', data, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${auth}`
+      }
+    });
+
+    const { access_token } = tokenResponse.data;
+
+    res.setHeader('Set-Cookie', `access_token=${access_token}; Path=/; Max-Age=3600`); // expires in 1 hour
+    res.status(200).redirect('/');
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error exchanging code for token');
+  }
+}
+```
+This route uses Axios to make a POST request to Spotify's token endpoint, authenticating with Basic Auth using the client ID and secret, and sets the obtained access token in a cookie with a one-hour expiration.
+
+#### Running the Application
+To test the application:
+- Start the development server:
+  ```bash
+  npm run dev
+  ```
+- Access the application at `http://localhost:3000`.
+- Click "Login with Spotify" to authenticate, grant permissions, and observe the player initializing and playing the sample track.
+
+#### Considerations and Limitations
+- Users must have a Spotify Premium account, as the Web Playback SDK requires it for streaming.
+- The example uses a hardcoded track URI for simplicity, but in a real application, you might want to allow users to select tracks.
+- Security considerations include storing tokens securely; for this example, cookies are used without `HttpOnly` for accessibility, but in production, consider using `HttpOnly` and secure storage mechanisms.
+- The redirect URI must match the one registered in your Spotify Developer Dashboard, set to `http://localhost:3000/api/auth/callback` for local development.
+
+#### Tables for Reference
+Below is a table summarizing the key files and their purposes:
+
+| File Path                     | Purpose                                                                 |
+|-------------------------------|-------------------------------------------------------------------------|
+| `pages/_document.tsx`         | Includes the Spotify Web Playback SDK script in the HTML head.          |
+| `pages/index.tsx`             | Handles user interface, login button, and player initialization.        |
+| `pages/api/auth/callback.ts`  | Processes OAuth callback, exchanges code for token, and sets cookie.    |
+| `.env`                        | Stores Spotify client ID and secret for authentication.                 |
+
+Another table for required scopes and their functions:
+
+| Scope                        | Function                                                                 |
+|------------------------------|-------------------------------------------------------------------------|
+| `streaming`                  | Allows playback of audio content via the Web Playback SDK.              |
+| `user-read-playback-state`   | Reads the user's current playback state, useful for player controls.    |
+
+This implementation ensures your site is registered as a playback device and can stream audio from Spotify, fulfilling the requirements for a "hello world" example.
+
+#### Key Citations
+- [Web Playback SDK Getting Started Tutorial Spotify for Developers](mdc:https:/developer.spotify.com/documentation/web-playback-sdk/tutorials/getting-started)
+- [GitHub next-typescript-spotify-web-playback-sdk Repository](mdc:https:/github.com/Ossamoon/next-typescript-spotify-web-playback-sdk)
+- [Spotify Web Playback SDK Reference Spotify for Developers](mdc:https:/developer.spotify.com/documentation/web-playback-sdk/reference)
+- [Building a Spotify Player inside a Web app Spotify for Developers](mdc:https:/developer.spotify.com/documentation/web-playback-sdk/howtos/web-app-player)
+- [Web API Reference Start a Users Playback Spotify for Developers](mdc:https:/developer.spotify.com/documentation/web-api/reference/start-a-users-playback)
+- [GitHub spotify-web-playback-sdk-example Repository](mdc:https:/github.com/spotify/spotify-web-playback-sdk-example)
+- [Spotify Web Playback SDK feat Electron Medium Article](mdc:https:/alexanderallen.medium.com/spotify-web-playback-sdk-feat-electron-50ff930d5c74)
+- [GitHub react-spotify-web-playback Repository](mdc:https:/github.com/gilbarbara/react-spotify-web-playback)
+- [Spotify Web Playback SDK Play Full Song Stack Overflow](mdc:https:/stackoverflow.com/questions/48693195/spotify-web-playback-sdk-play-full-song)
+- [Web Playback SDK Spotify for Developers](mdc:https:/developer.spotify.com/documentation/web-playback-sdk)
+- [Getting Started with Web Playback SDK Spotify for Developers](mdc:https:/developer.spotify.com/documentation/web-playback-sdk/tutorials/getting-started)
+- [TypeScript SDK for Spotify Web API Blog Post](mdc:https:/developer.spotify.com/blog/2023-07-03-typescript-sdk)
+- [How to use Spotify API with Next.js DEV Community](mdc:https:/dev.to/j471n/how-to-use-spotify-api-with-nextjs-50o5)
+- [spotify-web-playback-sdk GitHub Topics Page](mdc:https:/github.com/topics/spotify-web-playback-sdk?l=typescript)
+- [npm @types/spotify-web-playback-sdk Package](mdc:https:/www.npmjs.com/package/%40types/spotify-web-playback-sdk)
+- [Next.js + TypeScript Spotify Web Playback SDK Zenn Article](mdc:https:/zenn.dev/ossamoon/articles/ef20bf19284fd8)
+
+
+
+// 1. ENVIRONMENT VARIABLES SETUP
+// .env.local
+NEXT_PUBLIC_SPOTIFY_CLIENT_ID=66d34ff981704013a7027ede6ad59c0e
+NEXT_PUBLIC_REDIRECT_URI=http://localhost:3000/api/auth/callback/spotify
+
+// 2. SPOTIFY CLIENT SETUP
+// lib/spotify.ts
+const clientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID || "";
+const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI || 
+  "http://localhost:3000/api/auth/callback/spotify";
+
+// 3. CALLBACK HANDLER
+// app/api/auth/callback/spotify/route.ts
+export async function GET(request: Request) {
+  // Handle Spotify auth callback
+  // Redirect to home page with appropriate parameters
+  return NextResponse.redirect(new URL('/', request.url));
+}
+
+// 4. HOME PAGE TOKEN HANDLING
+// app/page.tsx
+useEffect(() => {
+  // Check for stored token
+  const storedToken = localStorage.getItem("spotify_token");
+  
+  // Handle error params
+  const errorParam = searchParams.get("error");
+  
+  // Extract token from hash fragment
+  if (typeof window !== 'undefined' && window.location.hash) {
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = hashParams.get('access_token');
+    if (accessToken) {
+      localStorage.setItem('spotify_token', accessToken);
+      setToken(accessToken);
+    }
+  }
+}, [searchParams]);

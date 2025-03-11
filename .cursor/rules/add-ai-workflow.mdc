@@ -1,0 +1,74 @@
+---
+description: add ai workflow
+globs: 
+alwaysApply: false
+---
+- run `bunx shadcn add https://simple-ai.dev/r/flow-parallelization.json https://simple-ai.dev/r/flow-chain.json https://simple-ai.dev/r/flow-routing.json https://simple-ai.dev/r/flow-orchestrator.json -o`
+- in a temp directory, clone https://github.com/Alwurts/simple-ai, then
+  1. copy src/registry/blocks/flow-parallelization/components/nodes-panel.tsx to components/flow/nodes-panel.tsx
+  2. copy src/registry/ui/flow/status-edge.tsx to components/flow/status-edge.tsx
+  3. copy src/registry/blocks/flow-parallelization/components/error-indicator.tsx to components/flow/error-indicator.tsx
+  4. when youre done copying, delete the temp directory
+- delete className in ReactMarkdown in components/ui/markdown-content.tsx
+- remove "disableModelSelector" in `generate-text-node-controller.tsx`
+- run ollama list, and then add the models to the list in `model-selector`. be sure use the exact model name in the list
+- do not prefix ollama models with "ollama:"
+- in `genereate-ai-text`, support ollama:
+  ```typescript
+  function createAIClient(model: Model) {
+    if (isOllama) {
+      return createOpenAI({
+        apiKey: "ollama-api-key",
+        baseURL: `http://localhost:11434/v1`,
+      });
+    }
+  // ...
+  ```
+- add cerebras support
+  ```typescript
+  // example import
+  import { createCerebras } from "@ai-sdk/cerebras";
+  // example usage
+  createCerebras({
+    apiKey: process.env.CEREBRAS_API_KEY ?? "",
+  })
+- add cerebras models:
+  1. llama3.1-8b
+  2. llama-3.3-70b
+  3. deepseek-r1-distill-llama-70b
+- add cerebras support
+  ```typescript
+  // example import
+  import { createTogetherAI } from '@ai-sdk/togetherai';
+  // example usage
+  const togetherai = createTogetherAI({
+    apiKey: process.env.TOGETHER_AI_API_KEY ?? '',
+  });
+  // example image generation
+  const { images } = await generateImage({
+    model: togetherai.image('black-forest-labs/FLUX.1.1-pro'),
+    prompt: 'A futuristic cityscape at sunset',
+    width: 1024,
+    height: 768,
+    steps: 1,
+    n: 1,
+    response_format: "b64_json");
+  });
+    // example text generation
+  const { text } = await generateText({
+    model: togetherai('meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo'),
+    prompt: 'Write a vegetarian lasagna recipe for 4 people.',
+  });
+- add together.ai models:
+  1. black-forest-labs/FLUX.1.1-pro
+  2. black-forest-labs/FLUX.1-schnell
+  3. Qwen/QwQ-32B-Preview
+  4. meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo
+- be sure to strip any prefixes before using the model name
+- ensure models with the same name from cerebras and ollama together do not conflict 
+- in all the flows, ensure cerebras "llama3.1-8b" is default, not llama-3.1-8b-instant
+- create a dropdown to select different flow documents:
+  - keep `lib/exam-creator-parallelization.ts` as the defaultValue
+  - on the workflow page, prompt the user for TOGETHER_API_KEY, CEREBRAS_API_KEY, give a lint to: https://cloud.cerebras.ai/platform.
+  - disable all models except for together, ollama and cerebras, make cerebras llama3.1-8b the default
+  - in local development mode in the api key modal, add an option to use local models, on . If checked, use the keys from .env.local

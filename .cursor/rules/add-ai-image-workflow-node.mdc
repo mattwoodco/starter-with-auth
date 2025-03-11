@@ -1,0 +1,105 @@
+---
+description: add ai image workflow node
+globs: 
+alwaysApply: false
+---
+- extend the workflow page at /generate that mimic "lib/exam-creator-parallelization.ts" but instead uses the inputs to generate a prompt and uses a new image prompt from fal.ai
+- add a new workflow node that takes text input, and then calls fal.ai
+- prompt me to add the API to FAL_API_KEY=
+- here is the openapi schema for the call I want to make:
+  ```json
+  {"openapi":"3.0.0","info":{"title":"Fal Queue API","version":"1.0.0","description":"The Fal Queue API."},"components":{"securitySchemes":{"apiKeyAuth":{"type":"apiKey","in":"header","name":"Authorization","description":"Fal Key"}},"schemas":{"QueueStatus":{"type":"object","properties":{"status":{"type":"string","enum":["IN_QUEUE","IN_PROGRESS","COMPLETED"]},"request_id":{"type":"string","description":"The request id."},"response_url":{"type":"string","description":"The response url."},"status_url":{"type":"string","description":"The status url."},"cancel_url":{"type":"string","description":"The cancel url."},"logs":{"type":"object","description":"The logs.","additionalProperties":true},"metrics":{"type":"object","description":"The metrics.","additionalProperties":true},"queue_position":{"type":"integer","description":"The queue position."}},"required":["status","request_id"]},"FluxLoraInput":{"title":"TextToImageInput","type":"object","properties":{"prompt":{"title":"Prompt","type":"string","description":"The prompt to generate an image from."},"num_images":{"minimum":1,"maximum":4,"type":"integer","title":"Num Images","description":"The number of images to generate.","default":1},"image_size":{"anyOf":[{"$ref":"#/components/schemas/ImageSize"},{"enum":["square_hd","square","portrait_4_3","portrait_16_9","landscape_4_3","landscape_16_9"],"type":"string"}],"title":"Image Size","description":"The size of the generated image.","default":"landscape_4_3"},"output_format":{"enum":["jpeg","png"],"title":"Output Format","type":"string","description":"The format of the generated image.","default":"jpeg"},"loras":{"description":"\n            The LoRAs to use for the image generation. You can use any number of LoRAs\n            and they will be merged together to generate the final image.\n        ","type":"array","items":{"$ref":"#/components/schemas/LoraWeight"},"title":"Loras","default":[]},"sync_mode":{"title":"Sync Mode","type":"boolean","description":"\n            If set to true, the function will wait for the image to be generated and uploaded\n            before returning the response. This will increase the latency of the function but\n            it allows you to get the image directly in the response without going through the CDN.\n        ","default":false},"guidance_scale":{"minimum":0,"maximum":35,"type":"number","title":"Guidance scale (CFG)","description":"\n            The CFG (Classifier Free Guidance) scale is a measure of how close you want\n            the model to stick to your prompt when looking for a related image to show you.\n        ","default":3.5},"num_inference_steps":{"minimum":1,"maximum":50,"type":"integer","title":"Num Inference Steps","description":"The number of inference steps to perform.","default":28},"seed":{"title":"Seed","type":"integer","description":"\n            The same seed and the same prompt given to the same version of the model\n            will output the same image every time.\n        "},"enable_safety_checker":{"title":"Enable Safety Checker","type":"boolean","description":"If set to true, the safety checker will be enabled.","default":true}},"x-fal-order-properties":["prompt","image_size","num_inference_steps","seed","loras","guidance_scale","sync_mode","num_images","enable_safety_checker","output_format"],"required":["prompt"]},"FluxLoraOutput":{"title":"Output","type":"object","properties":{"prompt":{"title":"Prompt","type":"string","description":"The prompt used for generating the image."},"images":{"title":"Images","type":"array","description":"The generated image files info.","items":{"$ref":"#/components/schemas/Image"}},"timings":{"additionalProperties":{"type":"number"},"type":"object","title":"Timings"},"has_nsfw_concepts":{"title":"Has Nsfw Concepts","type":"array","description":"Whether the generated images contain NSFW concepts.","items":{"type":"boolean"}},"seed":{"title":"Seed","type":"integer","description":"\n            Seed of the generated Image. It will be the same value of the one passed in the\n            input or the randomly generated that was used in case none was passed.\n        "}},"x-fal-order-properties":["images","timings","seed","has_nsfw_concepts","prompt"],"required":["images","timings","seed","has_nsfw_concepts","prompt"]},"ImageSize":{"title":"ImageSize","type":"object","properties":{"height":{"maximum":14142,"type":"integer","title":"Height","description":"The height of the generated image.","exclusiveMinimum":0,"default":512},"width":{"maximum":14142,"type":"integer","title":"Width","description":"The width of the generated image.","exclusiveMinimum":0,"default":512}},"x-fal-order-properties":["width","height"]},"LoraWeight":{"title":"LoraWeight","type":"object","properties":{"path":{"title":"Path","type":"string","description":"URL or the path to the LoRA weights."},"scale":{"minimum":0,"maximum":4,"type":"number","title":"Scale","description":"\n            The scale of the LoRA weight. This is used to scale the LoRA weight\n            before merging it with the base model.\n        ","default":1}},"x-fal-order-properties":["path","scale"],"required":["path"]},"Image":{"title":"Image","type":"object","properties":{"height":{"title":"Height","type":"integer"},"content_type":{"title":"Content Type","type":"string","default":"image/jpeg"},"url":{"title":"Url","type":"string"},"width":{"title":"Width","type":"integer"}},"x-fal-order-properties":["url","width","height","content_type"],"required":["url","width","height"]}}},"paths":{"/fal-ai/flux-lora/requests/{request_id}/status":{"get":{"parameters":[{"name":"request_id","in":"path","required":true,"schema":{"type":"string","description":"Request ID"}},{"name":"logs","in":"query","required":false,"schema":{"type":"number","description":"Whether to include logs (`1`) in the response or not (`0`)."}}],"responses":{"200":{"description":"The request status.","content":{"application/json":{"schema":{"$ref":"#/components/schemas/QueueStatus"}}}}}}},"/fal-ai/flux-lora/requests/{request_id}/cancel":{"put":{"parameters":[{"name":"request_id","in":"path","required":true,"schema":{"type":"string","description":"Request ID"}}],"responses":{"200":{"description":"The request was cancelled.","content":{"application/json":{"schema":{"type":"object","properties":{"success":{"type":"boolean","description":"Whether the request was cancelled successfully."}}}}}}}}},"/fal-ai/flux-lora":{"post":{"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/FluxLoraInput"}}}},"responses":{"200":{"description":"The request status.","content":{"application/json":{"schema":{"$ref":"#/components/schemas/QueueStatus"}}}}}}},"/fal-ai/flux-lora/requests/{request_id}":{"get":{"parameters":[{"name":"request_id","in":"path","required":true,"schema":{"type":"string","description":"Request ID"}}],"responses":{"200":{"description":"Result of the request.","content":{"application/json":{"schema":{"$ref":"#/components/schemas/FluxLoraOutput"}}}}}}}},"servers":[{"url":"https://queue.fal.run"}],"security":[{"apiKeyAuth":[]}]}
+  ```
+
+I'll rewrite the entire document using action verbs in imperative form:
+
+## Fix Issues in fal.ai Image Generation
+
+### 1. Fix Authorization Header Format
+Correct the API key format in the Authorization header:
+```typescript
+// Before
+Authorization: `${apiKey}`
+
+// After
+Authorization: `Key ${apiKey}`
+```
+
+### 2. Modify Polling Mechanism
+Update polling to handle "in progress" status correctly:
+```typescript
+// Before
+if (!response.ok) {
+  const errorText = await response.text();
+  throw new Error(`Failed to get result: ${errorText}`);
+}
+
+// After
+const responseData = await response.json();
+      
+if (responseData.detail === "Request is still in progress") {
+  console.log(`Image generation in progress, attempt ${attempts + 1}...`);
+  attempts++;
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  continue;
+}
+```
+
+### 3. Add Result Validation
+Implement validation to ensure images are present in the result:
+```typescript
+if (!result.images || result.images.length === 0) {
+  throw new Error("No images were generated");
+}
+```
+
+### 4. Add Improved Logging
+Implement better logging to track the image generation process:
+```typescript
+console.log("Image generation started, request ID:", queueStatus.request_id);
+console.log("Image generation completed, result:", result);
+```
+
+### 5. Increase Polling Interval
+Update polling interval from 1 to 2 seconds to reduce API load:
+```typescript
+// Before
+await new Promise((resolve) => setTimeout(resolve, 1000));
+
+// After
+await new Promise((resolve) => setTimeout(resolve, 2000));
+```
+
+
+## More fix
+
+### 1. Fix Authorization Header Format
+- Add the required 'Key' scheme to the API authorization header
+```typescript
+Authorization: `Key ${apiKey}`
+```
+
+### 2. Improve Polling Mechanism
+- Handle "in progress" status correctly instead of treating it as an error
+- Increase polling interval to 2 seconds to reduce API load
+- Add proper response parsing before checking status
+
+### 3. Connect Execution State to UI
+- Pass execution state sources to the FalAiNode component
+```typescript
+result: data.executionState?.sources || data.result
+```
+
+### 4. Enhance Image Display
+- Add overflow handling to image container
+- Set proper image constraints with CSS
+- Use object-contain to maintain aspect ratio
+- Add eager loading for immediate display
+
+### 5. Improve User Feedback
+- Add conditional messaging when image is loading or missing
+- Remove debugging JSON output for cleaner UI
+
+### 6. Fix TypeScript Issues
+- Update NodeHeaderAction component to properly accept children
+- Fix variant type definitions to match button requirements
