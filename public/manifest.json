@@ -1,6 +1,6 @@
 {
-  "name": "NaaS",
-  "short_name": "NaaS",
+  "name": "Starter",
+  "short_name": "Starter",
   "theme_color": "#000000",
   "background_color": "#ffffff",
   "display": "standalone",
