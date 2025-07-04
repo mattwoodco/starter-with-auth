@@ -281,40 +281,51 @@ function generateCompetitorSearchQuery(
   businessLocation: string,
   businessAddress: string
 ): string {
-  // Try to extract location from the business address if not provided
-  if (!businessLocation && businessAddress) {
+  let location = businessLocation;
+  if (!location && businessAddress) {
     const addressParts = businessAddress.split(',');
     if (addressParts.length > 1) {
-      return `businesses ${addressParts.at(-2)?.trim()}`;
+      location = addressParts.at(-2)?.trim() || '';
+    }
+  }
+  const lowerName = businessName.toLowerCase();
+  const searchLocation = location || businessAddress || 'near me';
+
+  // Mapping of business type keywords to competitor queries
+  const typeMappings = [
+    {
+      keywords: ['starbucks', 'coffee', 'cafe'],
+      query: `coffee shops cafes ${searchLocation}`,
+    },
+    {
+      keywords: ['automotriz', 'auto', 'car', 'mechanic'],
+      query: `auto shops car repair mechanics ${searchLocation}`,
+    },
+    {
+      keywords: ['salon', 'salón', 'hair', 'beauty', 'barber'],
+      query: `hair salons beauty salons barber shops ${searchLocation}`,
+    },
+    { keywords: ['pizza'], query: `pizza restaurants ${searchLocation}` },
+    {
+      keywords: ['restaurant', 'food'],
+      query: `restaurants ${searchLocation}`,
+    },
+    {
+      keywords: ['gym', 'fitness'],
+      query: `gyms fitness centers ${searchLocation}`,
+    },
+    { keywords: ['hotel', 'motel'], query: `hotels motels ${searchLocation}` },
+    { keywords: ['bar', 'pub'], query: `bars pubs ${searchLocation}` },
+  ];
+
+  for (const mapping of typeMappings) {
+    if (mapping.keywords.some((kw) => lowerName.includes(kw))) {
+      return mapping.query;
     }
   }
 
-  const lowerName = businessName.toLowerCase();
-  const searchLocation = businessLocation || businessAddress || 'near me';
-
-  if (
-    lowerName.includes('automotriz') ||
-    lowerName.includes('auto') ||
-    lowerName.includes('car')
-  ) {
-    return `auto shops car repair mechanics ${searchLocation}`;
-  }
-  if (
-    lowerName.includes('salon') ||
-    lowerName.includes('salón') ||
-    lowerName.includes('hair') ||
-    lowerName.includes('beauty')
-  ) {
-    return `hair salons beauty salons ${searchLocation}`;
-  }
-  if (lowerName.includes('coffee') || lowerName.includes('cafe')) {
-    return `coffee shops cafes ${searchLocation}`;
-  }
-  if (lowerName.includes('restaurant') || lowerName.includes('food')) {
-    return `restaurants ${searchLocation}`;
-  }
-
-  return `businesses ${searchLocation}`;
+  // Default to searching for similar businesses in the area
+  return `${businessName.split(' ')[0]} ${searchLocation}`;
 }
 
 // Helper function to filter and sort competitors
@@ -403,7 +414,7 @@ function generateInsightsAndComparison(
     const ratingGap = topCompetitor.rating - yourBusiness.rating;
 
     if (reviewGap > 0) {
-      yourRankingMessage = `Your competitor ${topCompetitor.name} has ${reviewGap} more reviews than you`;
+      yourRankingMessage = `Your competitor ${topCompetitor.name || topCompetitor.title || 'Top competitor'} has ${reviewGap} more reviews than you`;
     } else {
       yourRankingMessage = `Your ${yourBusiness.rating.toFixed(
         1
@@ -439,6 +450,142 @@ function generateInsightsAndComparison(
   };
 }
 
+// Helper: fetch and validate business
+async function fetchAndValidateBusiness(
+  businessName: string,
+  location?: string
+) {
+  const { results: searchResults, searchMethod } = await searchWithFallbacks(
+    businessName,
+    location
+  );
+  if (
+    !searchResults.local_results ||
+    searchResults.local_results.length === 0
+  ) {
+    return {
+      error: {
+        error: 'No businesses found',
+        suggestion: 'Try a more specific business name or add location details',
+        debugInfo: {
+          searchedFor: businessName,
+          location: location || 'not specified',
+          searchMethod,
+          tip: 'For small businesses, try adding the full address or neighborhood',
+        },
+      },
+      yourBusinessRaw: null,
+      searchMethod,
+    };
+  }
+  return {
+    error: null,
+    yourBusinessRaw: searchResults.local_results[0],
+    searchMethod,
+  };
+}
+
+// Helper: fetch and filter competitors
+async function fetchAndFilterCompetitors(
+  businessName: string,
+  location: string,
+  yourBusinessRaw: BusinessData
+) {
+  const competitorSearch = generateCompetitorSearchQuery(
+    businessName,
+    location || '',
+    yourBusinessRaw.address || ''
+  );
+  const competitorResults = await searchGoogleMaps(competitorSearch);
+  const topCompetitorsRaw = competitorResults.local_results
+    ? filterAndSortCompetitors(
+        competitorResults.local_results,
+        yourBusinessRaw.name || yourBusinessRaw.title || '',
+        yourBusinessRaw.data_id
+      )
+    : [];
+  if (topCompetitorsRaw.length === 0) {
+    return {
+      error: {
+        error: 'No competitors found in the area',
+        suggestion:
+          'This might be a unique business in the area, or try searching in a broader location',
+        debugInfo: {
+          originalSearch: businessName,
+          competitorSearch,
+          foundBusinesses: competitorResults.local_results?.length || 0,
+          yourBusiness: {
+            name: yourBusinessRaw.name || yourBusinessRaw.title,
+            address: yourBusinessRaw.address,
+          },
+        },
+      },
+      topCompetitorsRaw: [],
+      competitorSearch,
+    };
+  }
+  return {
+    error: null,
+    topCompetitorsRaw,
+    competitorSearch,
+  };
+}
+
+// Helper: format business data
+function formatBusinessData(yourBusinessRaw: BusinessData): BusinessData {
+  return {
+    name: yourBusinessRaw.name || yourBusinessRaw.title || 'Unknown',
+    rating: yourBusinessRaw.rating || 0,
+    reviews: yourBusinessRaw.reviews || 0,
+    address: yourBusinessRaw.address || '',
+    phone: yourBusinessRaw.phone,
+    website: yourBusinessRaw.website,
+    hours: yourBusinessRaw.hours,
+    price: yourBusinessRaw.price,
+    data_id: yourBusinessRaw.data_id,
+    place_id: yourBusinessRaw.place_id,
+    gps_coordinates: yourBusinessRaw.gps_coordinates,
+  };
+}
+
+// Helper: format competitors data
+function formatCompetitorsData(
+  topCompetitorsRaw: BusinessData[],
+  yourBusinessRaw: BusinessData
+): BusinessData[] {
+  return topCompetitorsRaw.map((competitor: BusinessData) => {
+    const competitorData: BusinessData = {
+      name: competitor.name || competitor.title || 'Unknown',
+      rating: competitor.rating || 0,
+      reviews: competitor.reviews || 0,
+      address: competitor.address || '',
+      phone: competitor.phone,
+      website: competitor.website,
+      hours: competitor.hours,
+      price: competitor.price,
+      data_id: competitor.data_id,
+      place_id: competitor.place_id,
+      gps_coordinates: competitor.gps_coordinates,
+    };
+    if (
+      yourBusinessRaw.gps_coordinates &&
+      competitor.gps_coordinates &&
+      yourBusinessRaw.gps_coordinates.latitude &&
+      yourBusinessRaw.gps_coordinates.longitude &&
+      competitor.gps_coordinates.latitude &&
+      competitor.gps_coordinates.longitude
+    ) {
+      competitorData.distance = calculateDistance(
+        yourBusinessRaw.gps_coordinates.latitude,
+        yourBusinessRaw.gps_coordinates.longitude,
+        competitor.gps_coordinates.latitude,
+        competitor.gps_coordinates.longitude
+      );
+    }
+    return competitorData;
+  });
+}
+
 // routes
 const apiRoutes = app
   .basePath('/api')
@@ -460,150 +607,43 @@ const apiRoutes = app
   .post('/analyze-reputation', async (c) => {
     try {
       const { businessName, location } = await c.req.json();
-
       if (!businessName) {
         return c.json({ error: 'Business name is required' }, 400);
       }
-
       // Step 1: Search for the specific business
-      const { results: searchResults, searchMethod } =
-        await searchWithFallbacks(businessName, location);
-
-      if (
-        !searchResults.local_results ||
-        searchResults.local_results.length === 0
-      ) {
-        return c.json(
-          {
-            error: 'No businesses found',
-            suggestion:
-              'Try a more specific business name or add location details',
-            debugInfo: {
-              searchedFor: businessName,
-              location: location || 'not specified',
-              searchMethod,
-              tip: 'For small businesses, try adding the full address or neighborhood',
-            },
-          },
-          404
-        );
+      const { error: businessError, yourBusinessRaw } =
+        await fetchAndValidateBusiness(businessName, location);
+      if (businessError) {
+        return c.json(businessError, 404);
       }
-
-      // Get your business (first result, assuming it's most relevant)
-      const yourBusinessRaw = searchResults.local_results[0];
-
-      // Debug log to see the structure
-      console.log(
-        'Your business raw data:',
-        JSON.stringify(yourBusinessRaw, null, 2)
-      );
-
-      // Step 2: Search for competitors based on business type and location
-      const competitorSearch = generateCompetitorSearchQuery(
-        businessName,
-        location || '',
-        yourBusinessRaw.address || ''
-      );
-
-      // Search for competitors
-      const competitorResults = await searchGoogleMaps(competitorSearch);
-
-      // Find multiple competitors (excluding the original business)
-      const topCompetitorsRaw = competitorResults.local_results
-        ? filterAndSortCompetitors(
-            competitorResults.local_results,
-            yourBusinessRaw.name,
-            yourBusinessRaw.data_id
-          )
-        : [];
-
-      if (topCompetitorsRaw.length === 0) {
-        return c.json(
-          {
-            error: 'No competitors found in the area',
-            suggestion:
-              'This might be a unique business in the area, or try searching in a broader location',
-            debugInfo: {
-              originalSearch: businessName,
-              competitorSearch,
-              foundBusinesses: competitorResults.local_results?.length || 0,
-              yourBusiness: {
-                name: yourBusinessRaw.name,
-                address: yourBusinessRaw.address,
-              },
-            },
-          },
-          404
+      // Step 2: Search for competitors
+      const { error: competitorsError, topCompetitorsRaw } =
+        await fetchAndFilterCompetitors(
+          businessName,
+          location || '',
+          yourBusinessRaw
         );
+      if (competitorsError) {
+        return c.json(competitorsError, 404);
       }
-
-      // Format business data
-      const yourBusiness: BusinessData = {
-        name: yourBusinessRaw.name,
-        rating: yourBusinessRaw.rating || 0,
-        reviews: yourBusinessRaw.reviews || 0,
-        address: yourBusinessRaw.address || '',
-        phone: yourBusinessRaw.phone,
-        website: yourBusinessRaw.website,
-        hours: yourBusinessRaw.hours,
-        price: yourBusinessRaw.price,
-        data_id: yourBusinessRaw.data_id,
-        place_id: yourBusinessRaw.place_id,
-        gps_coordinates: yourBusinessRaw.gps_coordinates,
-      };
-
-      const topCompetitors: BusinessData[] = topCompetitorsRaw.map(
-        (competitor: BusinessData) => {
-          const competitorData: BusinessData = {
-            name: competitor.name,
-            rating: competitor.rating || 0,
-            reviews: competitor.reviews || 0,
-            address: competitor.address || '',
-            phone: competitor.phone,
-            website: competitor.website,
-            hours: competitor.hours,
-            price: competitor.price,
-            data_id: competitor.data_id,
-            place_id: competitor.place_id,
-            gps_coordinates: competitor.gps_coordinates,
-          };
-
-          // Calculate distance if both businesses have GPS coordinates
-          if (
-            yourBusinessRaw.gps_coordinates &&
-            competitor.gps_coordinates &&
-            yourBusinessRaw.gps_coordinates.latitude &&
-            yourBusinessRaw.gps_coordinates.longitude &&
-            competitor.gps_coordinates.latitude &&
-            competitor.gps_coordinates.longitude
-          ) {
-            competitorData.distance = calculateDistance(
-              yourBusinessRaw.gps_coordinates.latitude,
-              yourBusinessRaw.gps_coordinates.longitude,
-              competitor.gps_coordinates.latitude,
-              competitor.gps_coordinates.longitude
-            );
-          }
-
-          return competitorData;
-        }
+      // Step 3: Format business and competitors data
+      const yourBusiness = formatBusinessData(yourBusinessRaw);
+      const topCompetitors = formatCompetitorsData(
+        topCompetitorsRaw,
+        yourBusinessRaw
       );
-
-      // Calculate advanced comparison metrics
+      // Step 4: Generate insights
       const comparison = generateInsightsAndComparison(
         yourBusiness,
         topCompetitors
       );
-
       const analysis: CompetitorAnalysis = {
         yourBusiness,
         topCompetitors,
         comparison,
       };
-
       return c.json(analysis);
     } catch (error) {
-      console.error('Analysis error:', error);
       return c.json(
         {
           error: 'Failed to analyze reputation',
@@ -622,8 +662,6 @@ const apiRoutes = app
       if (!dataId) {
         return c.json({ error: 'Data ID is required' }, 400);
       }
-
-      console.log(`Fetching reviews for business: ${dataId}`);
 
       const reviewsData = await getBusinessReviews(dataId);
 
@@ -668,7 +706,6 @@ const apiRoutes = app
 
       return c.json(response);
     } catch (error) {
-      console.error('Reviews error:', error);
       return c.json(
         {
           error: 'Failed to get reviews',
@@ -686,10 +723,6 @@ const apiRoutes = app
       if (!query) {
         return c.json({ error: 'Search query is required' }, 400);
       }
-
-      console.log(
-        `Searching for businesses: ${query}${location ? ` in ${location}` : ''}`
-      );
 
       const searchResults = await searchWithFallbacks(query, location);
 
