@@ -1,18 +1,25 @@
-import { Header } from '@/components/common/header';
-import { Message } from '@/components/common/message';
-import { siteConfig } from '@/config/site';
+import { ModeToggle } from '@/components/common/mode-toggle';
+import { ReputationTracker } from '@/components/reputation-tracker';
 
 export default () => {
   return (
     <div className="flex h-screen w-screen flex-col p-6">
-      <Header />
-      <section className="mx-auto flex max-w-sm flex-1 animate-delay-200 animate-fade-up flex-col gap-3">
-        <p className="text-foreground/85 text-sm/5">{siteConfig.description}</p>
-        <Message />
-      </section>
-      {/* <footer className="flex items-center justify-end">
+      {/* <Header /> */}
+      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center">
+        <div className="mb-8 text-center">
+          <h1 className="mb-2 font-bold text-4xl">
+            Business Reputation Tracker
+          </h1>
+          <p className="text-lg text-muted-foreground">
+            Analyze your business reputation and compare with competitors using
+            Google Reviews data
+          </p>
+        </div>
+        <ReputationTracker />
+      </main>
+      <footer className="flex items-center justify-end">
         <ModeToggle />
-      </footer> */}
+      </footer>
     </div>
   );
 };
