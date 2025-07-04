@@ -2,7 +2,9 @@
 
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 
 export type EmailPayload = {
   to: string;
@@ -12,6 +14,10 @@ export type EmailPayload = {
 };
 
 export async function sendEmail(payload: EmailPayload) {
+  if (!resend) {
+    return { success: false, error: 'RESEND_API_KEY not configured' };
+  }
+
   const { to, subject, text, html } = payload;
 
   try {
