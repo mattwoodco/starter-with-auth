@@ -1,0 +1,28 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.0.6/schema.json",
+  "extends": ["ultracite"],
+  "linter": {
+    "rules": {
+      "style": {
+        "useImportType": "warn"
+      },
+      "suspicious": {
+        "noConsole": "warn",
+        "useAwait": "warn"
+      },
+      "performance": {
+        "noNamespaceImport": "warn"
+      },
+      "nursery": {
+        "noUnknownAtRule": "off"
+      }
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
+  }
+}

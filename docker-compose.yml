@@ -1,10 +1,10 @@
 services:
-  db:
+  mvp-database:
     image: ankane/pgvector
     environment:
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
-      POSTGRES_DB: test
+      POSTGRES_DB: postgres
     ports:
       - "5432:5432"
     volumes:
